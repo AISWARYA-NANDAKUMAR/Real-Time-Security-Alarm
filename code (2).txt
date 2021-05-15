@@ -1,0 +1,115 @@
+
+#include <ESP8266WebServer.h>
+#include <ESP8266mDNS.h>
+#include <ESP8266WiFi.h>
+#include <WiFiClient.h>
+#include <HCSR04.h>
+#include <Wire.h>
+
+UltraSonicDistanceSensor distanceSensor(D3, D4); 
+
+const char* ssid = "Security alert";
+const char* password ="12345678";
+String msg="NORMAL";
+unsigned int dis;
+char buzzer             = D0;
+ESP8266WebServer server(80);
+
+void handleRoot() 
+{
+  String cmd;     
+  cmd += "<!DOCTYPE HTML>\r\n";
+  cmd += "<html>\r\n";
+  cmd += "<head>";
+  
+  cmd += "<title>\"CONTROL PANEL\"</title>";
+  cmd += "<meta http-equiv='refresh' content='3'/>";
+  
+  cmd += "<style>";
+  cmd += "a {";
+  cmd += "background-color: blue;";
+  cmd += "border: yellow;";
+  cmd += "color: white;";
+  cmd += "padding: 7px 20px;";
+  cmd += "text-align: center;";
+  cmd += "text-decoration: none;}";
+  cmd += "a:hover {background-color: green;}";
+  cmd += "</style>";
+
+  
+  cmd += "</head>";
+ 
+  cmd += "<h1>SECURITY ALERT</h1>";
+  
+  cmd += "<h3>MESSAGE -:  " +  msg +"</h3>";
+ 
+  cmd += "<h3>Distance-:  " + String(dis)+"</h3>";
+  
+  cmd += "<html>\r\n";
+  server.send(200, "text/html", cmd);
+}
+void handleNotFound()
+{
+  String message = "File Not Found\n\n";
+  message += "URI: ";
+  message += server.uri();
+  message += "\nMethod: ";
+  message += (server.method() == HTTP_GET)?"GET":"POST";
+  message += "\nArguments: ";
+  message += server.args();
+  message += "\n";
+  for (uint8_t i=0; i<server.args(); i++)
+  {
+    message += " " + server.argName(i) + ": " + server.arg(i) + "\n";
+  }
+  server.send(404, "text/plain", message);
+}
+
+void setup()
+{
+
+   
+  pinMode(buzzer,OUTPUT);
+  digitalWrite(buzzer,LOW);
+  Serial.begin(9600);
+  
+  WiFi.mode(WIFI_AP_STA);  //need both to serve the webpage and take commands via tcp
+  Serial.println("");
+  IPAddress ip(1,2,3,4);
+  IPAddress gateway(1,2,3,1);
+  IPAddress subnet(255,255,255,0);
+  WiFi.softAPConfig(ip, gateway, subnet);
+  WiFi.softAP(ssid,password); //Access point is open
+
+  delay(1000);
+  IPAddress myIP = WiFi.softAPIP();
+  Serial.print("AP IP address: ");
+  Serial.println(myIP);
+
+  if (MDNS.begin("esp8266")) { Serial.println("MDNS responder started"); }
+  server.on("/", handleRoot);
+  
+  server.onNotFound(handleNotFound);
+  server.begin();
+  Serial.println("HTTP server started");
+  
+}
+
+void loop()
+{
+  server.handleClient();delay(200);
+  dis=distanceSensor.measureDistanceCm();
+    
+    if (dis>150){dis=150;}
+    if (dis<1)  {dis=5;  }
+    if(dis<15)
+  {
+      msg="Security Alert!"; 
+      digitalWrite(buzzer,HIGH);
+  }
+  else 
+  {
+      msg="Normal";
+      digitalWrite(buzzer,LOW);
+  }
+}
